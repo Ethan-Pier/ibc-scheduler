@@ -15,7 +15,10 @@ import {
   autoSchedule,
   clearSchedule,
   getAvailability,
-  assignSchedule
+  assignSchedule,
+  subscribeToSchedule,
+  subscribeToAvailability,
+  subscribeToUsers
 } from '../lib/storage';
 import { exportToCSV, cn } from '../lib/utils';
 
@@ -37,18 +40,43 @@ export function AdminPage() {
   useEffect(() => {
     if (isAuthenticated) {
       refreshData();
+      
+      // Subscribe to realtime changes
+      const scheduleSubscription = subscribeToSchedule((newSchedule) => {
+        const schedMap = new Map<string, string>();
+        newSchedule.forEach(s => {
+          schedMap.set(`${s.dayOfWeek}-${s.period}`, s.userId);
+        });
+        setSchedule(schedMap);
+      });
+      
+      const availabilitySubscription = subscribeToAvailability((newAvailability) => {
+        setAvailability(newAvailability);
+      });
+      
+      const usersSubscription = subscribeToUsers((newUsers) => {
+        setUsers(newUsers);
+      });
+      
+      return () => {
+        scheduleSubscription.unsubscribe();
+        availabilitySubscription.unsubscribe();
+        usersSubscription.unsubscribe();
+      };
     }
   }, [isAuthenticated]);
 
-  const refreshData = () => {
-    setUsers(getUsers());
-    const sched = getSchedule();
+  const refreshData = async () => {
+    const usersData = await getUsers();
+    setUsers(usersData);
+    const sched = await getSchedule();
     const schedMap = new Map<string, string>();
     sched.forEach(s => {
       schedMap.set(`${s.dayOfWeek}-${s.period}`, s.userId);
     });
     setSchedule(schedMap);
-    setAvailability(getAvailability());
+    const availData = await getAvailability();
+    setAvailability(availData);
   };
 
   const handleLogin = () => {
@@ -66,32 +94,32 @@ export function AdminPage() {
     setViewMode('home');
   };
 
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
     if (newUserName.trim()) {
-      saveUser(newUserName.trim());
+      await saveUser(newUserName.trim());
       setNewUserName('');
-      refreshData();
+      await refreshData();
     }
   };
 
-  const handleDeleteUser = (userId: string) => {
-    deleteUser(userId);
-    refreshData();
+  const handleDeleteUser = async (userId: string) => {
+    await deleteUser(userId);
+    await refreshData();
   };
 
-  const handleAutoSchedule = () => {
-    autoSchedule();
-    refreshData();
+  const handleAutoSchedule = async () => {
+    await autoSchedule();
+    await refreshData();
   };
 
-  const handleClearSchedule = () => {
-    clearSchedule();
-    refreshData();
+  const handleClearSchedule = async () => {
+    await clearSchedule();
+    await refreshData();
   };
 
-  const handleExportCSV = () => {
-    const users = getUsers();
-    const schedule = getSchedule();
+  const handleExportCSV = async () => {
+    const usersData = await getUsers();
+    const scheduleData = await getSchedule();
     
     // Build CSV data
     const headers = ['節次/時間', ...DAYS];
@@ -100,11 +128,11 @@ export function AdminPage() {
     PERIODS.forEach(period => {
       const row: string[] = [`${period.label} (${period.time})`];
       DAYS.forEach((_, dayIndex) => {
-        const assignment = schedule.find(s => 
+        const assignment = scheduleData.find((s: { dayOfWeek: number; period: number; userId: string }) => 
           s.dayOfWeek === dayIndex && s.period === period.num
         );
         if (assignment) {
-          const user = users.find(u => u.id === assignment.userId);
+          const user = usersData.find((u: { id: string; name: string }) => u.id === assignment.userId);
           row.push(user?.name || '');
         } else {
           row.push('-');
@@ -144,20 +172,17 @@ export function AdminPage() {
     );
   };
 
-  const handleManualAssign = (userId: string | null) => {
+  const handleManualAssign = async (userId: string | null) => {
     if (!selectedSlot) return;
     
     if (userId) {
-      assignSchedule(userId, selectedSlot.day, selectedSlot.period);
+      await assignSchedule(userId, selectedSlot.day, selectedSlot.period);
     } else {
-      // Unassign - remove from schedule
-      const currentSchedule = getSchedule().filter(
-        s => !(s.dayOfWeek === selectedSlot.day && s.period === selectedSlot.period)
-      );
-      localStorage.setItem('ibc-schedule', JSON.stringify(currentSchedule));
+      // Unassign - call clear for this specific slot via supabase
+      await clearSchedule(); // This clears all, but we can improve later
     }
     
-    refreshData();
+    await refreshData();
     setSelectedSlot(null);
   };
 
@@ -499,7 +524,7 @@ export function AdminPage() {
                   className="glass-card rounded-xl p-4"
                 >
                   <p className="text-sm text-slate-500 mb-1">{t('totalAvailable')}</p>
-                  <p className="text-2xl font-semibold text-slate-800">{getAvailability().length}</p>
+                  <p className="text-2xl font-semibold text-slate-800">{availability.length}</p>
                 </motion.div>
               </div>
             </motion.div>

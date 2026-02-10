@@ -1,7 +1,13 @@
+import { createClient } from '@supabase/supabase-js';
 import type { User, Availability, Schedule } from '../types';
-import { generateId } from './utils';
 
-const STORAGE_KEYS = {
+const SUPABASE_URL = 'https://gwohqnrjsshxqvgpdxkj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd3b2hxbnJqc3NoeHF2Z3BkeGtqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3MjY5MzMsImV4cCI6MjA4NjMwMjkzM30.TBAyDjYmjyVxfiY95vyNUj4DxML_JNvg5YZV-lrMyCI';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Local cache for offline support
+const LOCAL_STORAGE_KEYS = {
   USERS: 'ibc-users',
   AVAILABILITY: 'ibc-availability',
   SCHEDULE: 'ibc-schedule',
@@ -9,120 +15,198 @@ const STORAGE_KEYS = {
 };
 
 // Users
-export function getUsers(): User[] {
-  const data = localStorage.getItem(STORAGE_KEYS.USERS);
-  return data ? JSON.parse(data) : [];
-}
-
-export function saveUser(name: string): User {
-  const users = getUsers();
-  const newUser: User = {
-    id: generateId(),
-    name,
-    createdAt: new Date().toISOString(),
-  };
-  users.push(newUser);
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  return newUser;
-}
-
-export function deleteUser(userId: string): void {
-  const users = getUsers().filter(u => u.id !== userId);
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+export async function getUsers(): Promise<User[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .order('created_at', { ascending: true });
   
-  // Also clean up availability and schedule
-  const availability = getAvailability().filter(a => a.userId !== userId);
-  localStorage.setItem(STORAGE_KEYS.AVAILABILITY, JSON.stringify(availability));
+  if (error) {
+    console.error('Error fetching users:', error);
+    // Fallback to localStorage
+    const local = localStorage.getItem(LOCAL_STORAGE_KEYS.USERS);
+    return local ? JSON.parse(local) : [];
+  }
   
-  const schedule = getSchedule().filter(s => s.userId !== userId);
-  localStorage.setItem(STORAGE_KEYS.SCHEDULE, JSON.stringify(schedule));
+  // Sync to localStorage for offline
+  localStorage.setItem(LOCAL_STORAGE_KEYS.USERS, JSON.stringify(data || []));
+  return data || [];
 }
 
-// Current User
+export async function saveUser(name: string): Promise<User> {
+  const { data, error } = await supabase
+    .from('users')
+    .insert([{ name }])
+    .select()
+    .single();
+  
+  if (error) {
+    console.error('Error saving user:', error);
+    throw error;
+  }
+  
+  return data;
+}
+
+export async function deleteUser(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('users')
+    .delete()
+    .eq('id', userId);
+  
+  if (error) {
+    console.error('Error deleting user:', error);
+    throw error;
+  }
+}
+
+// Current User (local only - device specific)
 export function getCurrentUser(): User | null {
-  const data = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+  const data = localStorage.getItem(LOCAL_STORAGE_KEYS.CURRENT_USER);
   return data ? JSON.parse(data) : null;
 }
 
 export function setCurrentUser(user: User | null): void {
   if (user) {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    localStorage.setItem(LOCAL_STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
   } else {
-    localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.CURRENT_USER);
   }
 }
 
 // Availability
-export function getAvailability(): Availability[] {
-  const data = localStorage.getItem(STORAGE_KEYS.AVAILABILITY);
-  return data ? JSON.parse(data) : [];
-}
-
-export function getUserAvailability(userId: string): Availability[] {
-  return getAvailability().filter(a => a.userId === userId);
-}
-
-export function toggleAvailability(userId: string, dayOfWeek: number, period: number): void {
-  const availability = getAvailability();
-  const existingIndex = availability.findIndex(
-    a => a.userId === userId && a.dayOfWeek === dayOfWeek && a.period === period
-  );
+export async function getAvailability(): Promise<Availability[]> {
+  const { data, error } = await supabase
+    .from('availability')
+    .select('*');
   
-  if (existingIndex >= 0) {
-    availability.splice(existingIndex, 1);
-  } else {
-    availability.push({
-      userId,
-      dayOfWeek,
-      period,
-      isAvailable: true,
-    });
+  if (error) {
+    console.error('Error fetching availability:', error);
+    const local = localStorage.getItem(LOCAL_STORAGE_KEYS.AVAILABILITY);
+    return local ? JSON.parse(local) : [];
   }
   
-  localStorage.setItem(STORAGE_KEYS.AVAILABILITY, JSON.stringify(availability));
+  // Transform to match our type
+  const transformed = (data || []).map(item => ({
+    userId: item.user_id,
+    dayOfWeek: item.day_of_week,
+    period: item.period,
+    isAvailable: true,
+  }));
+  
+  localStorage.setItem(LOCAL_STORAGE_KEYS.AVAILABILITY, JSON.stringify(transformed));
+  return transformed;
+}
+
+export async function getUserAvailability(userId: string): Promise<Availability[]> {
+  const all = await getAvailability();
+  return all.filter(a => a.userId === userId);
+}
+
+export async function toggleAvailability(userId: string, dayOfWeek: number, period: number): Promise<void> {
+  // Check if exists
+  const { data: existing } = await supabase
+    .from('availability')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('day_of_week', dayOfWeek)
+    .eq('period', period)
+    .single();
+  
+  if (existing) {
+    // Delete
+    await supabase
+      .from('availability')
+      .delete()
+      .eq('user_id', userId)
+      .eq('day_of_week', dayOfWeek)
+      .eq('period', period);
+  } else {
+    // Insert
+    await supabase
+      .from('availability')
+      .insert([{ user_id: userId, day_of_week: dayOfWeek, period }]);
+  }
 }
 
 export function isAvailable(userId: string, dayOfWeek: number, period: number): boolean {
-  return getAvailability().some(
-    a => a.userId === userId && a.dayOfWeek === dayOfWeek && a.period === period
+  const availability = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEYS.AVAILABILITY) || '[]');
+  return availability.some(
+    (a: Availability) => a.userId === userId && a.dayOfWeek === dayOfWeek && a.period === period
   );
 }
 
 // Schedule
-export function getSchedule(): Schedule[] {
-  const data = localStorage.getItem(STORAGE_KEYS.SCHEDULE);
-  return data ? JSON.parse(data) : [];
-}
-
-export function getScheduleForSlot(dayOfWeek: number, period: number): Schedule | undefined {
-  return getSchedule().find(s => s.dayOfWeek === dayOfWeek && s.period === period);
-}
-
-export function assignSchedule(userId: string, dayOfWeek: number, period: number): void {
-  const schedule = getSchedule().filter(s => !(s.dayOfWeek === dayOfWeek && s.period === period));
-  schedule.push({
-    userId,
-    dayOfWeek,
-    period,
+export async function getSchedule(): Promise<Schedule[]> {
+  const { data, error } = await supabase
+    .from('schedule')
+    .select('*');
+  
+  if (error) {
+    console.error('Error fetching schedule:', error);
+    const local = localStorage.getItem(LOCAL_STORAGE_KEYS.SCHEDULE);
+    return local ? JSON.parse(local) : [];
+  }
+  
+  const transformed = (data || []).map(item => ({
+    userId: item.user_id,
+    dayOfWeek: item.day_of_week,
+    period: item.period,
     assigned: true,
-  });
-  localStorage.setItem(STORAGE_KEYS.SCHEDULE, JSON.stringify(schedule));
+  }));
+  
+  localStorage.setItem(LOCAL_STORAGE_KEYS.SCHEDULE, JSON.stringify(transformed));
+  return transformed;
 }
 
-export function clearSchedule(): void {
-  localStorage.setItem(STORAGE_KEYS.SCHEDULE, JSON.stringify([]));
+export async function getScheduleForSlot(dayOfWeek: number, period: number): Promise<Schedule | undefined> {
+  const schedule = await getSchedule();
+  return schedule.find(s => s.dayOfWeek === dayOfWeek && s.period === period);
+}
+
+export async function assignSchedule(userId: string, dayOfWeek: number, period: number): Promise<void> {
+  // Delete existing assignment for this slot
+  await supabase
+    .from('schedule')
+    .delete()
+    .eq('day_of_week', dayOfWeek)
+    .eq('period', period);
+  
+  // Insert new assignment
+  const { error } = await supabase
+    .from('schedule')
+    .insert([{ user_id: userId, day_of_week: dayOfWeek, period }]);
+  
+  if (error) {
+    console.error('Error assigning schedule:', error);
+    throw error;
+  }
+}
+
+export async function clearSchedule(): Promise<void> {
+  const { error } = await supabase
+    .from('schedule')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+  
+  if (error) {
+    console.error('Error clearing schedule:', error);
+    throw error;
+  }
 }
 
 // Auto Schedule
-export function autoSchedule(): Schedule[] {
-  const users = getUsers();
-  const availability = getAvailability();
+export async function autoSchedule(): Promise<Schedule[]> {
+  const users = await getUsers();
+  const availability = await getAvailability();
+  
+  // Clear existing schedule
+  await clearSchedule();
+  
   const newSchedule: Schedule[] = [];
   
-  // For each day and period
   for (let day = 0; day < 5; day++) {
     for (let period = 1; period <= 8; period++) {
-      // Find available users for this slot
       const availableUsers = users.filter(user =>
         availability.some(a => 
           a.userId === user.id && 
@@ -132,7 +216,7 @@ export function autoSchedule(): Schedule[] {
       );
       
       if (availableUsers.length > 0) {
-        // Pick user with least assignments so far
+        // Pick user with least assignments
         const userAssignmentCount = new Map<string, number>();
         availableUsers.forEach(user => {
           userAssignmentCount.set(user.id, newSchedule.filter(s => s.userId === user.id).length);
@@ -141,6 +225,8 @@ export function autoSchedule(): Schedule[] {
         const selectedUser = availableUsers.sort((a, b) => 
           (userAssignmentCount.get(a.id) || 0) - (userAssignmentCount.get(b.id) || 0)
         )[0];
+        
+        await assignSchedule(selectedUser.id, day, period);
         
         newSchedule.push({
           userId: selectedUser.id,
@@ -152,6 +238,36 @@ export function autoSchedule(): Schedule[] {
     }
   }
   
-  localStorage.setItem(STORAGE_KEYS.SCHEDULE, JSON.stringify(newSchedule));
   return newSchedule;
+}
+
+// Realtime subscription
+export function subscribeToSchedule(callback: (schedule: Schedule[]) => void) {
+  return supabase
+    .channel('schedule_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule' }, async () => {
+      const schedule = await getSchedule();
+      callback(schedule);
+    })
+    .subscribe();
+}
+
+export function subscribeToAvailability(callback: (availability: Availability[]) => void) {
+  return supabase
+    .channel('availability_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'availability' }, async () => {
+      const availability = await getAvailability();
+      callback(availability);
+    })
+    .subscribe();
+}
+
+export function subscribeToUsers(callback: (users: User[]) => void) {
+  return supabase
+    .channel('users_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, async () => {
+      const users = await getUsers();
+      callback(users);
+    })
+    .subscribe();
 }

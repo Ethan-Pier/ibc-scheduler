@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -10,8 +10,12 @@ import { cn } from '../lib/utils';
 export function HomePage() {
   const { setViewMode, setCurrentUser: setAppUser } = useApp();
   const { t } = useLanguage();
-  const [users] = useState<User[]>(getUsers());
+  const [users, setUsers] = useState<User[]>([]);
   const [hoveredUser, setHoveredUser] = useState<string | null>(null);
+
+  useEffect(() => {
+    getUsers().then(setUsers);
+  }, []);
 
   const handleSelectUser = (user: User) => {
     setAppUser(user);

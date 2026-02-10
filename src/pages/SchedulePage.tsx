@@ -18,18 +18,19 @@ export function SchedulePage() {
 
   useEffect(() => {
     if (currentUser) {
-      const userAvail = getUserAvailability(currentUser.id);
-      const slotSet = new Set(
-        userAvail.map(a => `${a.dayOfWeek}-${a.period}`)
-      );
-      setAvailability(slotSet);
+      getUserAvailability(currentUser.id).then(userAvail => {
+        const slotSet = new Set(
+          userAvail.map(a => `${a.dayOfWeek}-${a.period}`)
+        );
+        setAvailability(slotSet);
+      });
     }
   }, [currentUser, refreshTrigger]);
 
-  const handleToggle = (day: number, period: number) => {
+  const handleToggle = async (day: number, period: number) => {
     if (!currentUser) return;
     
-    toggleAvailability(currentUser.id, day, period);
+    await toggleAvailability(currentUser.id, day, period);
     const key = `${day}-${period}`;
     setAvailability(prev => {
       const next = new Set(prev);
