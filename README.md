@@ -1,73 +1,140 @@
-# React + TypeScript + Vite
+# IBC 排班系統
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一個精美的玻璃質感排班系統，支持跨設備同步。
 
-Currently, two official plugins are available:
+![Screenshot](https://via.placeholder.com/800x450.png?text=IBC+Scheduler)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## ✨ 功能特性
 
-## React Compiler
+- 🎨 **玻璃質感 UI** - 極光背景 + Framer Motion 動畫
+- 🔄 **跨設備同步** - Supabase 實時數據同步
+- 👥 **多使用者支持** - 管理員可添加/刪除使用者
+- 📅 **智能排班** - 自動排班算法，支持手動調整
+- 🌐 **雙語支持** - 中文/English 切換
+- 📊 **CSV 導出** - 一鍵導出排班表
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🚀 快速部署（3分鐘）
 
-## Expanding the ESLint configuration
+### 方法一：一鍵部署腳本（推薦）
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+```bash
+# 1. 克隆專案
+git clone https://github.com/Ethan-Pier/ibc-scheduler.git
+cd ibc-scheduler
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# 2. 運行部署腳本
+./deploy.sh
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+腳本會自動：
+- 安裝依賴
+- 配置 Supabase
+- 構建項目
+- 部署到 GitHub Pages
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 方法二：手動部署
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+#### 1. 創建 Supabase 項目
+
+1. 訪問 [supabase.com](https://supabase.com) 並登入
+2. 點擊 "New Project"，名稱填 `ibc-scheduler`
+3. 等待數據庫創建完成
+4. 進入 SQL Editor，執行以下 SQL：
+
+```sql
+-- 用戶表
+CREATE TABLE users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 給班表
+CREATE TABLE availability (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  day_of_week INTEGER NOT NULL,
+  period INTEGER NOT NULL,
+  UNIQUE(user_id, day_of_week, period)
+);
+
+-- 排班表
+CREATE TABLE schedule (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  day_of_week INTEGER NOT NULL,
+  period INTEGER NOT NULL,
+  UNIQUE(day_of_week, period)
+);
+
+-- 啟用 Realtime
+ALTER TABLE schedule REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE schedule;
+ALTER TABLE availability REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE availability;
+ALTER TABLE users REPLICA IDENTITY FULL;
+ALTER PUBLICATION supabase_realtime ADD TABLE users;
 ```
+
+#### 2. 獲取 API 密鑰
+
+1. Project Settings > API
+2. 複製 `Project URL` 和 `anon public` key
+3. 更新 `src/lib/storage.ts` 中的配置：
+
+```typescript
+const SUPABASE_URL = '你的 Project URL';
+const SUPABASE_KEY = '你的 Anon Key';
+```
+
+#### 3. 部署到 GitHub Pages
+
+```bash
+# 安裝依賴
+npm install
+
+# 構建
+npm run build
+
+# 部署到 GitHub Pages
+npm run deploy
+```
+
+## 📁 項目結構
+
+```
+ibc-scheduler/
+├── .github/workflows/    # GitHub Actions 自動部署
+├── src/
+│   ├── components/       # UI 組件
+│   ├── context/         # React Context
+│   ├── lib/             # 工具函數 & Supabase 配置
+│   ├── pages/           # 頁面組件
+│   └── types/           # TypeScript 類型
+├── deploy.sh            # 一鍵部署腳本
+└── README.md            # 本文檔
+```
+
+## 🔧 本地開發
+
+```bash
+# 安裝依賴
+npm install
+
+# 啟動開發伺服器
+npm run dev
+
+# 訪問 http://localhost:5173
+```
+
+## 🌐 管理員登入
+
+- **口令**: `IBCprincipal`
+
+## 📄 許可證
+
+MIT License
+
+## 🤝 貢獻
+
+歡迎提交 Issue 和 Pull Request！
