@@ -25,14 +25,30 @@ const LOCAL_STORAGE_KEYS = {
 };
 
 // Users
-export async function getUsers(): Promise<User[]> {
-  const { data, error } = await supabase
+export async function deleteUser(userId: string): Promise<void> {
+  // First delete related availability records
+  await supabase
+    .from('availability')
+    .delete()
+    .eq('user_id', userId);
+
+  // Then delete related schedule records
+  await supabase
+    .from('schedule')
+    .delete()
+    .eq('user_id', userId);
+
+  // Finally delete the user
+  const { error } = await supabase
     .from('users')
-    .select('*')
-    .order('created_at', { ascending: true });
+    .delete()
+    .eq('id', userId);
   
   if (error) {
-    console.error('Error fetching users:', error);
+    console.error('Error deleting user:', error);
+    throw error;
+  }
+}
     // Fallback to localStorage
     const local = localStorage.getItem(LOCAL_STORAGE_KEYS.USERS);
     return local ? JSON.parse(local) : [];
