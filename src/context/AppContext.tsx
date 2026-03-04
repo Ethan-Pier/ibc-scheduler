@@ -11,6 +11,8 @@ interface AppContextType {
   setIsAdmin: (isAdmin: boolean) => void;
   refreshData: () => void;
   refreshTrigger: number;
+  isLocked: boolean;
+  setIsLocked: (locked: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -20,6 +22,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUserState] = useState<User | null>(getCurrentUser());
   const [isAdmin, setIsAdmin] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [isLocked, setIsLocked] = useState(() => {
+    // Check if previously unlocked
+    return !localStorage.getItem('ibc_unlocked');
+  });
 
   const setCurrentUser = useCallback((user: User | null) => {
     setCurrentUserState(user);
@@ -40,6 +46,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setIsAdmin,
       refreshData,
       refreshTrigger,
+      isLocked,
+      setIsLocked,
     }}>
       {children}
     </AppContext.Provider>

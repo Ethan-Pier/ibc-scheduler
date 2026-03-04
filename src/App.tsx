@@ -4,9 +4,15 @@ import { AuroraBackground } from './components/AuroraBackground';
 import { HomePage } from './pages/HomePage';
 import { SchedulePage } from './pages/SchedulePage';
 import { AdminPage } from './pages/AdminPage';
+import { LockScreen } from './pages/LockScreen';
 
 function App() {
-  const { viewMode } = useApp();
+  const { viewMode, isLocked, setIsLocked } = useApp();
+
+  // If locked, show lock screen
+  if (isLocked) {
+    return <LockScreen onUnlock={() => setIsLocked(false)} />;
+  }
 
   return (
     <div className="relative min-h-screen">
