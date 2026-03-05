@@ -11,8 +11,12 @@ import { ThemeToggle } from './components/ThemeToggle';
 function AppContent() {
   const { viewMode, isLocked, setIsLocked } = useApp();
 
+  // DEBUG: Force lock screen to show
+  console.log('isLocked:', isLocked);
+
   // If locked, show lock screen
-  if (isLocked) {
+  // DEBUG: Always show lock screen for testing
+  if (true || isLocked) {
     return <LockScreen onUnlock={() => setIsLocked(false)} />;
   }
 
