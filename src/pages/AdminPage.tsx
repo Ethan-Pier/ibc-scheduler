@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, Calendar, Wand2, Download, 
   Plus, Trash2, Check, X, Shield, Lock, Languages, LogOut,
-  ClipboardList, History
+  ClipboardList, History, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -39,6 +39,7 @@ export function AdminPage() {
   const [newUserName, setNewUserName] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<{day: number, period: number} | null>(null);
   const [availability, setAvailability] = useState<Availability[]>([]);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   // Conflict detection and hours stats
   const scheduleArray = useMemo(() => {
@@ -261,22 +262,33 @@ export function AdminPage() {
       className="min-h-screen flex"
     >
       {/* Floating Sidebar */}
-      <motion.aside
-        initial={{ x: -100, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="floating-sidebar w-64 p-4 overflow-y-auto flex flex-col"
-      >
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6 p-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-slate-800">{t('adminTitle')}</h2>
-            <p className="text-xs text-slate-500">{t('loggedIn')}</p>
-          </div>
-        </div>
+      <AnimatePresence mode="wait">
+        {sidebarVisible && (
+          <motion.aside
+            initial={{ x: -100, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: -100, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="floating-sidebar w-64 p-4 overflow-y-auto flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6 p-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
+                  <Shield className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-slate-800">{t('adminTitle')}</h2>
+                  <p className="text-xs text-slate-500">{t('loggedIn')}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSidebarVisible(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-white/40 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </div>
 
         {/* Main Menu Content */}
         <div className="flex-1">
@@ -354,9 +366,21 @@ export function AdminPage() {
           <span className="font-medium">{t('logout')}</span>
         </button>
       </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Toggle Sidebar Button */}
+      {!sidebarVisible && (
+        <button
+          onClick={() => setSidebarVisible(true)}
+          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-blue-500 text-white shadow-lg flex items-center justify-center hover:bg-blue-600 transition-colors"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 p-8 ml-80">
+      <main className={cn("flex-1 p-8", sidebarVisible ? "ml-80" : "ml-4")}>
         <AnimatePresence mode="wait">
           {activeTab === 'schedule' ? (
             <motion.div
