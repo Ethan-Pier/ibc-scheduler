@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeProvider } from './context/ThemeContext';
+import { RealtimeProvider } from './context/RealtimeContext';
 import { useApp } from './context/AppContext';
 import { AuroraBackground } from './components/AuroraBackground';
 import { HomePage } from './pages/HomePage';
@@ -64,7 +65,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <RealtimeProvider>
+        <AppContent />
+      </RealtimeProvider>
     </ThemeProvider>
   );
 }

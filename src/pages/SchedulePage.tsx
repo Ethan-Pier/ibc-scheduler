@@ -1,48 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Clock, Check, Info, CalendarOff } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useRealtime } from '../context/RealtimeContext';
 import { DAYS, PERIODS } from '../types';
 import { 
-  getUserAvailability, 
   toggleAvailability
 } from '../lib/storage';
 import { cn } from '../lib/utils';
 import { LeaveRequestModal } from '../components/LeaveRequestModal';
 
 export function SchedulePage() {
-  const { currentUser, setViewMode, refreshTrigger } = useApp();
+  const { currentUser, setViewMode } = useApp();
   const { t } = useLanguage();
-  const [availability, setAvailability] = useState<Set<string>>(new Set());
+  const { availability, refresh } = useRealtime();
   const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
 
-  useEffect(() => {
-    if (currentUser) {
-      getUserAvailability(currentUser.id).then(userAvail => {
-        const slotSet = new Set(
-          userAvail.map(a => `${a.dayOfWeek}-${a.period}`)
-        );
-        setAvailability(slotSet);
-      });
-    }
-  }, [currentUser, refreshTrigger]);
+  // Get current user's availability from global state
+  const userAvailability = useMemo(() => {
+    if (!currentUser) return new Set<string>();
+    return new Set(
+      availability
+        .filter(a => a.userId === currentUser.id)
+        .map(a => `${a.dayOfWeek}-${a.period}`)
+    );
+  }, [availability, currentUser]);
 
   const handleToggle = async (day: number, period: number) => {
     if (!currentUser) return;
     
     await toggleAvailability(currentUser.id, day, period);
-    const key = `${day}-${period}`;
-    setAvailability(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
+    // Realtime subscription will update the global state automatically
+    // But we can also manually refresh to be sure
+    await refresh();
   };
 
   if (!currentUser) {
@@ -86,7 +78,7 @@ export function SchedulePage() {
           <div className="flex items-center gap-3">
             <div className="pill-tag">
               <Check className="w-3 h-3 mr-1" />
-              {t('selectedSlots')}: {availability.size}
+              {t('selectedSlots')}: {userAvailability.size}
             </div>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -165,7 +157,7 @@ export function SchedulePage() {
                     {/* Day Cells */}
                     {DAYS.map((_, dayIndex) => {
                       const key = `${dayIndex}-${period.num}`;
-                      const isSelected = availability.has(key);
+                      const isSelected = userAvailability.has(key);
                       const isHovered = hoveredSlot === key;
                       
                       return (

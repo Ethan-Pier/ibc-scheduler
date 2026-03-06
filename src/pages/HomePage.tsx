@@ -1,23 +1,18 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Sparkles, Calendar } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
-import { getUsers, getSchedule, setCurrentUser } from '../lib/storage';
+import { useRealtime } from '../context/RealtimeContext';
+import { setCurrentUser } from '../lib/storage';
 import type { User } from '../types';
 import { cn, getUpcomingShifts } from '../lib/utils';
 
 export function HomePage() {
   const { setViewMode, setCurrentUser: setAppUser } = useApp();
   const { t } = useLanguage();
-  const [users, setUsers] = useState<User[]>([]);
+  const { users, schedule } = useRealtime();
   const [hoveredUser, setHoveredUser] = useState<string | null>(null);
-  const [schedule, setSchedule] = useState<{userId: string; dayOfWeek: number; period: number; assigned: boolean}[]>([]);
-
-  useEffect(() => {
-    getUsers().then(setUsers);
-    getSchedule().then(setSchedule);
-  }, []);
 
   // Calculate upcoming shifts for each user
   const upcomingShiftsMap = useMemo(() => {

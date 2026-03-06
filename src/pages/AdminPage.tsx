@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Users, Calendar, Wand2, Download, 
@@ -7,19 +7,14 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
-import { DAYS, PERIODS, type User, type Availability } from '../types';
+import { useRealtime } from '../context/RealtimeContext';
+import { DAYS, PERIODS, type User } from '../types';
 import { 
-  getUsers, 
   saveUser, 
   deleteUser, 
-  getSchedule,
   autoSchedule,
   clearSchedule,
-  getAvailability,
   assignSchedule,
-  subscribeToSchedule,
-  subscribeToAvailability,
-  subscribeToUsers
 } from '../lib/storage';
 import { exportScheduleToCSV, cn, calculateHoursPerUser } from '../lib/utils';
 import { LeaveRequestsPage } from './LeaveRequestsPage';
@@ -30,70 +25,35 @@ const ADMIN_PASSWORD = 'IBCprincipal';
 export function AdminPage() {
   const { setViewMode } = useApp();
   const { t, language, toggleLanguage } = useLanguage();
+  const { users, schedule, availability, refresh } = useRealtime();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [users, setUsers] = useState<User[]>([]);
-  const [schedule, setSchedule] = useState<Map<string, string>>(new Map());
   const [activeTab, setActiveTab] = useState<'schedule' | 'users' | 'leave-requests' | 'history'>('schedule');
   const [newUserName, setNewUserName] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<{day: number, period: number} | null>(null);
-  const [availability, setAvailability] = useState<Availability[]>([]);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+
+  // Transform schedule to Map format
+  const scheduleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    schedule.forEach(s => {
+      map.set(`${s.dayOfWeek}-${s.period}`, s.userId);
+    });
+    return map;
+  }, [schedule]);
 
   // Conflict detection and hours stats
   const scheduleArray = useMemo(() => {
-    const arr: { userId: string; dayOfWeek: number; period: number; assigned: boolean }[] = [];
-    schedule.forEach((userId, key) => {
-      const [day, period] = key.split('-').map(Number);
-      arr.push({ userId, dayOfWeek: day, period, assigned: true });
-    });
-    return arr;
+    return schedule.map(s => ({
+      userId: s.userId,
+      dayOfWeek: s.dayOfWeek,
+      period: s.period,
+      assigned: s.assigned
+    }));
   }, [schedule]);
 
   const hoursStats = useMemo(() => calculateHoursPerUser(scheduleArray, users), [scheduleArray, users]);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      refreshData();
-      
-      // Subscribe to realtime changes
-      const scheduleSubscription = subscribeToSchedule((newSchedule) => {
-        const schedMap = new Map<string, string>();
-        newSchedule.forEach(s => {
-          schedMap.set(`${s.dayOfWeek}-${s.period}`, s.userId);
-        });
-        setSchedule(schedMap);
-      });
-      
-      const availabilitySubscription = subscribeToAvailability((newAvailability) => {
-        setAvailability(newAvailability);
-      });
-      
-      const usersSubscription = subscribeToUsers((newUsers) => {
-        setUsers(newUsers);
-      });
-      
-      return () => {
-        scheduleSubscription.unsubscribe();
-        availabilitySubscription.unsubscribe();
-        usersSubscription.unsubscribe();
-      };
-    }
-  }, [isAuthenticated]);
-
-  const refreshData = async () => {
-    const usersData = await getUsers();
-    setUsers(usersData);
-    const sched = await getSchedule();
-    const schedMap = new Map<string, string>();
-    sched.forEach(s => {
-      schedMap.set(`${s.dayOfWeek}-${s.period}`, s.userId);
-    });
-    setSchedule(schedMap);
-    const availData = await getAvailability();
-    setAvailability(availData);
-  };
 
   const handleLogin = () => {
     if (password === ADMIN_PASSWORD) {
@@ -114,32 +74,29 @@ export function AdminPage() {
     if (newUserName.trim()) {
       await saveUser(newUserName.trim());
       setNewUserName('');
-      await refreshData();
+      await refresh();
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
     await deleteUser(userId);
-    await refreshData();
+    await refresh();
   };
 
   const handleAutoSchedule = async () => {
     await autoSchedule();
-    await refreshData();
+    await refresh();
   };
 
   const handleClearSchedule = async () => {
     await clearSchedule();
-    await refreshData();
+    await refresh();
   };
 
   const handleExportCSV = async () => {
-    const usersData = await getUsers();
-    const scheduleData = await getSchedule();
-    
     exportScheduleToCSV(
-      scheduleData,
-      usersData,
+      schedule,
+      users,
       `排班表_${new Date().toISOString().split('T')[0]}.csv`
     );
   };
@@ -177,7 +134,7 @@ export function AdminPage() {
       await clearSchedule(); // This clears all, but we can improve later
     }
     
-    await refreshData();
+    await refresh();
     setSelectedSlot(null);
   };
 
@@ -489,7 +446,7 @@ export function AdminPage() {
                           {/* Day Cells */}
                           {DAYS.map((_, dayIndex) => {
                             const key = `${dayIndex}-${period.num}`;
-                            const userId = schedule.get(key);
+                            const userId = scheduleMap.get(key);
                             const availableUsers = getAvailableUsersForSlot(dayIndex, period.num);
                             const isAssigned = !!userId;
                             
@@ -563,7 +520,7 @@ export function AdminPage() {
                   className="glass-card rounded-xl p-4"
                 >
                   <p className="text-sm text-slate-500 mb-1">{t('scheduledSlots')}</p>
-                  <p className="text-2xl font-semibold text-slate-800">{schedule.size}</p>
+                  <p className="text-2xl font-semibold text-slate-800">{schedule.length}</p>
                 </motion.div>
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -729,7 +686,7 @@ export function AdminPage() {
                     onClick={() => handleManualAssign(user.id)}
                     className={cn(
                       "w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left",
-                      schedule.get(`${selectedSlot.day}-${selectedSlot.period}`) === user.id
+                      scheduleMap.get(`${selectedSlot.day}-${selectedSlot.period}`) === user.id
                         ? "bg-blue-50/70 border border-blue-200"
                         : "bg-white/40 hover:bg-white/60"
                     )}
@@ -742,13 +699,13 @@ export function AdminPage() {
                     </div>
                     <div className="flex-1">
                       <span className="font-medium text-slate-700 block">{user.name}</span>
-                      {schedule.get(`${selectedSlot.day}-${selectedSlot.period}`) === user.id && (
+                      {scheduleMap.get(`${selectedSlot.day}-${selectedSlot.period}`) === user.id && (
                         <span className="text-xs text-blue-600">
                           {language === 'zh' ? '已選擇' : 'Selected'}
                         </span>
                       )}
                     </div>
-                    {schedule.get(`${selectedSlot.day}-${selectedSlot.period}`) === user.id && (
+                    {scheduleMap.get(`${selectedSlot.day}-${selectedSlot.period}`) === user.id && (
                       <Check className="w-5 h-5 text-blue-500" />
                     )}
                   </button>
