@@ -157,6 +157,44 @@ body {
   z-index: 50;
 }
 
+.sidebar-toggle-btn,
+.sidebar-toggle-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background-color: rgba(255, 255, 255, 0.72);
+  color: rgb(71, 85, 105);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 30px -18px rgba(15, 23, 42, 0.45);
+  transition: all 0.2s ease;
+}
+
+.sidebar-toggle-btn {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle-fab {
+  position: fixed;
+  left: 1.5rem;
+  top: 1rem;
+  z-index: 55;
+  padding: 0.75rem 0.95rem;
+  border-radius: 9999px;
+}
+
+.sidebar-toggle-btn:hover,
+.sidebar-toggle-fab:hover {
+  background-color: rgba(255, 255, 255, 0.88);
+  color: rgb(37, 99, 235);
+  box-shadow: 0 18px 40px -18px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
 /* Pill Tag */
 .pill-tag {
   display: inline-flex;
