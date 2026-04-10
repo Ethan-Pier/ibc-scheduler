@@ -65,6 +65,12 @@ fi
 # 保存當前分支
 CURRENT_BRANCH=$(git branch --show-current)
 
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "❌ 為避免 gh-pages 與主線再次漂移，現在只允許從 main 分支部署。"
+    echo "請先切換到 main，確認變更已合併後再執行 ./deploy.sh"
+    exit 1
+fi
+
 # 創建或切換到 gh-pages 分支
 if git show-ref --verify --quiet refs/heads/gh-pages; then
     git checkout gh-pages

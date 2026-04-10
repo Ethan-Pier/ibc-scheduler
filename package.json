@@ -5,7 +5,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0 --port $PORT",
-    "deploy": "./deploy.sh"
+    "deploy": "./deploy.sh",
+    "backup:subsidy": "node scripts/backup-subsidy-data.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
